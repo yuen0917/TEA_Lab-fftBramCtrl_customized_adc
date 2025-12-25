@@ -32,8 +32,17 @@
 - bram_we: BRAM的write enable信號
 - bram_en: BRAM的enable信號
 - bram_rst: BRAM的重置信號
+- finish: 通知外部已經完成256筆FFT的寫入
+- start: 重新啟動Controller
 
 ### 版本
 
 - fftBramCtrl: v1.0
 - fftBramCtrl_v2: v2.0
+    - 重新設計狀態機
+    - 新增了finish信號，用於通知外部已經完成256筆FFT的寫入
+    - 新增了start信號，用於從外部重新啟動Controller
+
+## Customized ADC
+
+## FFT-CORDIC-CTRL

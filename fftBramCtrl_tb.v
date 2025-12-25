@@ -12,6 +12,7 @@ module fftBramCtrl_tb;
     reg [383:0] s_axis_tdata;
     reg         s_axis_tvalid;
     reg         s_axis_tlast;
+    reg         start;
     wire        s_axis_tready;
 
     wire [31:0] bram_addr;
@@ -20,10 +21,11 @@ module fftBramCtrl_tb;
     wire [3:0]  bram_we;
     wire        bram_en;
     wire        bram_rst;
+    wire        finish;
 
     // Simulation Control
     parameter CLK_PERIOD = 10;
-    parameter NUM_PACKETS = 6; // Stress test with 1000 packets (8000 writes)
+    parameter NUM_PACKETS = 500; // Stress test with 1000 packets (8000 writes)
 
     integer error_count = 0;
     integer success_count = 0;
@@ -44,7 +46,9 @@ module fftBramCtrl_tb;
         .bram_din_im(bram_din_im),
         .bram_we(bram_we),
         .bram_en(bram_en),
-        .bram_rst(bram_rst)
+        .bram_rst(bram_rst),
+        .finish(finish),
+        .start(start)
     );
 
     // =========================================================================
@@ -87,11 +91,14 @@ module fftBramCtrl_tb;
     // 5. Main Stimulus Process (Driver)
     // =========================================================================
     initial begin
+        $dumpfile("C:/Users/n4282/Desktop/TEA_Lab/fftBramCtrl/TEA_lab_fftBramCtrl_customized_adc/fftBramCtrl_tb.vcd");
+        $dumpvars(0, fftBramCtrl_tb);
         // Init
         rst_n         = 0;
         s_axis_tdata  = 0;
         s_axis_tvalid = 0;
         s_axis_tlast  = 0;
+        start         = 0;
 
         $display("\n==================================================");
         $display("   STARTING SELF-CHECKING TESTBENCH");
@@ -110,31 +117,45 @@ module fftBramCtrl_tb;
                             $random, $random, $random, $random,
                             $random, $random, $random, $random};
 
-            // 2. Drive AXI Stream
+            // 2. Push Data to FIFO
+            push_fifo(s_axis_tdata);           
+            transaction_count = transaction_count + 1;
+
+            if (transaction_count == 256) begin
+                @(posedge clk);
+                start = 1;
+                @(posedge clk);
+            end else begin
+                start = 0;
+            end
+            
+            // 3. Drive AXI Stream
             s_axis_tvalid = 1;
             s_axis_tlast  = 1;
 
-            // Ensure valid is held for at least one clock edge so DUT can see it
-            // Since ready is 1 (IDLE), handshake happens on this edge.
-            @(posedge clk);
-
-            // Handshake occurred: Push to Scoreboard IMMEDIATELY
-            push_fifo(s_axis_tdata);
-
-            // Wait for DUT to become BUSY (ready -> 0)
-            while (s_axis_tready == 1) begin
+            // Wait for DUT to be Ready (if it is busy/reset)
+            while (s_axis_tready == 0) begin
                @(posedge clk);
             end
 
-            // Wait for DUT to finish processing (ready -> 1)
+            // Now Ready is 1. Handshake happens on the NEXT clock edge.
+            @(posedge clk);
+
+            // Handshake done. Drop valid immediately.
+            s_axis_tvalid = 0;
+            s_axis_tlast  = 0;
+
+            // Wait for DUT to assert BUSY (ready -> 0)
+            while (s_axis_tready == 1) begin
+               @(posedge clk);
+            end
+            
+            // Wait for DUT to finish (Ready again)
             while (s_axis_tready == 0) begin
                 @(posedge clk);
             end
-            transaction_count = transaction_count + 1;
 
             // 4. Randomize idle time
-            s_axis_tvalid = 0;
-            s_axis_tlast  = 0;
 
             if ($random % 2 == 0) begin
                 repeat (($random % 5) + 1) @(posedge clk);
@@ -212,14 +233,14 @@ module fftBramCtrl_tb;
 
                 // 5. Compare Data
                 if (bram_din_re !== exp_re) begin
-                    // $display("ERROR at time %t: Real Data Mismatch (Packet %d, Slice %d). Exp: %h, Got: %h",
-                             // $time, fifo_read_ptr, slice_idx, exp_re, bram_din_re);
+                    $display("ERROR at time %t: Real Data Mismatch (Packet %d, Slice %d). Exp: %h, Got: %h",
+                             $time, fifo_read_ptr, slice_idx, exp_re, bram_din_re);
                     error_count = error_count + 1;
                 end
 
                 if (bram_din_im !== exp_im) begin
-                    // $display("ERROR at time %t: Imag Data Mismatch (Packet %d, Slice %d). Exp: %h, Got: %h",
-                            // $time, fifo_read_ptr, slice_idx, exp_im, bram_din_im);
+                    $display("ERROR at time %t: Imag Data Mismatch (Packet %d, Slice %d). Exp: %h, Got: %h",
+                            $time, fifo_read_ptr, slice_idx, exp_im, bram_din_im);
                     error_count = error_count + 1;
                 end
 

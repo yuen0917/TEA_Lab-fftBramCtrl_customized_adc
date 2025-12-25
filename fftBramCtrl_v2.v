@@ -3,6 +3,7 @@
 module fftBramCtrl_v2 (
     input  wire         clk,
     input  wire         rst_n,
+    input  wire         start,
 
     // AXI Stream Input (from FFT)
     input  wire [383:0] s_axis_tdata,
@@ -16,26 +17,29 @@ module fftBramCtrl_v2 (
     output wire [ 31:0] bram_din_im,
     output reg  [  3:0] bram_we,
     output wire         bram_en,
-    output wire         bram_rst
+    output wire         bram_rst,
+
+    output reg          finish
 );
-    localparam S_IDLE = 2'b00;
-    localparam S_BUSY = 2'b01;
-    localparam S_DONE = 2'b10;
+    localparam S_IDLE   = 2'b00;
+    localparam S_BUSY   = 2'b01;
+    localparam S_DONE   = 2'b10;
+    localparam S_FINISH = 2'b11;
 
-    reg [1:0] state;
-    reg [1:0] next_state;
+    reg [  1:0] state;
+    reg [  1:0] next_state;
 
-    reg [ 3:0] micCount;
-    reg [31:0] dataRegReal,dataRegImag;
-    reg [12:0] addr_counter;
+    reg [  3:0] micCount;
+    reg [ 31:0] dataRegReal,dataRegImag;
+    reg [ 12:0] addr_counter;
+    reg [  8:0] finish_counter;
     // bram depth is currently 2048
     // 256 bit fft * 8 channels = 2048
 
     reg [383:0] s_axis_tdata_reg;
-    reg         s_axis_tready_reg;
     reg         busy;
 
-    assign s_axis_tready = ~busy;
+    assign s_axis_tready = (state == S_FINISH) ? 1'b0 : ~busy;
 
     // BRAM assignments
     assign bram_rst = ~rst_n;
@@ -62,7 +66,10 @@ module fftBramCtrl_v2 (
           next_state <= (micCount == 4'd7) ? S_DONE : S_BUSY;
         end
         S_DONE: begin
-          next_state <= S_IDLE;
+          next_state <= (finish_counter == 8'd255) ? S_FINISH : S_IDLE;
+        end
+        S_FINISH: begin
+          next_state <= (start) ? S_IDLE : S_FINISH;
         end
         default: begin
           next_state <= S_IDLE;
@@ -73,12 +80,14 @@ module fftBramCtrl_v2 (
     always @(posedge clk or negedge rst_n) begin
       if(!rst_n) begin
         addr_counter      <= -13'd4;
-        micCount          <=  4'd0;
-        dataRegReal       <= 32'd0;
-        dataRegImag       <= 32'd0;
-        s_axis_tready_reg <=  1'b0;
-        busy              <=  1'b0;    
-        bram_we           <=  4'b0;   
+        micCount          <=   4'd0;
+        dataRegReal       <=  32'd0;
+        dataRegImag       <=  32'd0;
+        busy              <=   1'b0;    
+        bram_we           <=   4'b0;  
+        s_axis_tdata_reg  <= 384'd0; 
+        finish_counter    <=   8'd0;
+        finish            <=   1'b0;
       end else begin
         case(state)
           S_IDLE: begin
@@ -101,15 +110,27 @@ module fftBramCtrl_v2 (
             busy         <= 1'b0;
             micCount     <= 4'd0;
             bram_we      <= 4'd0;
+            if (finish_counter == 8'd255) begin
+              finish_counter <= 8'd0;
+              finish         <= 1'b1;
+            end else begin
+              finish_counter <= finish_counter + 1;
+              finish         <= 1'b0;
+            end
+          end
+          S_FINISH: begin
+            finish <= 1'b0;
           end
           default: begin
             addr_counter      <= -13'd4;
-            micCount          <=  4'd0;
-            dataRegReal       <= 32'd0;
-            dataRegImag       <= 32'd0;
-            s_axis_tready_reg <=  1'b0;
-            busy              <=  1'b0;    
-            bram_we           <=  4'b0;   
+            micCount          <=   4'd0;
+            dataRegReal       <=  32'd0;
+            dataRegImag       <=  32'd0;
+            busy              <=   1'b0;    
+            bram_we           <=   4'b0;   
+            s_axis_tdata_reg  <= 384'd0; 
+            finish_counter    <=   8'd0;
+            finish            <=   1'b0;
           end
         endcase
       end
