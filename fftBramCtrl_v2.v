@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+// v2.0
 
 module fftBramCtrl_v2 (
     input  wire         clk,
