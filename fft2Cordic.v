@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module cutHalf #(
+module fft2Cordic #(
     parameter DATA_WIDTH = 48, // Matches the cordic_0 input width in your design
     parameter FFT_LENGTH = 512
 ) (
@@ -22,7 +22,7 @@ module cutHalf #(
 
     // Calculate half length
     localparam KEEP_LENGTH = FFT_LENGTH / 2;
-    
+
     // Counter to track the sample index (need 9 bits for 0-511)
     reg [8:0] sample_cnt;
 
@@ -47,7 +47,7 @@ module cutHalf #(
     //-------------------------------------------------------------------------
     // Filtering Logic
     //-------------------------------------------------------------------------
-    
+
     // Determine if we are in the "Keep" zone (first half)
     wire keep_data;
     assign keep_data = (sample_cnt < KEEP_LENGTH);
@@ -66,11 +66,11 @@ module cutHalf #(
     //-------------------------------------------------------------------------
     // Backpressure (TREADY) Logic
     //-------------------------------------------------------------------------
-    // This is the most critical part. 
+    // This is the most critical part.
     // 1. If we are in the "Keep" zone, we pass the CORDIC's readiness (m_axis_tready) to the FFT.
-    // 2. If we are in the "Discard" zone (sample_cnt >= 256), we MUST assert ready (1'b1) 
+    // 2. If we are in the "Discard" zone (sample_cnt >= 256), we MUST assert ready (1'b1)
     //    to the FFT so it can dump the rest of the frame. If we don't, the FFT will stall.
-    
+
     assign s_axis_tready = keep_data ? m_axis_tready : 1'b1;
 
 endmodule
