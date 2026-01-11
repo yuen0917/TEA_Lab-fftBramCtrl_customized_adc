@@ -13,7 +13,7 @@ module fftBramCtrl_v2 (
     output wire         s_axis_tready,
 
     // BRAM Port A Output
-    output wire [ 31:0] bram_addr,
+    output wire [ 12:0] bram_addr,
     output wire [ 31:0] bram_din_re,
     output wire [ 31:0] bram_din_im,
     output reg  [  3:0] bram_we,
@@ -80,7 +80,7 @@ module fftBramCtrl_v2 (
 
     always @(posedge clk or negedge rst_n) begin
       if(!rst_n) begin
-        addr_counter      <= -13'd4;
+        addr_counter      <= 13'b1111111111100;
         micCount          <=   4'd0;
         dataRegReal       <=  32'd0;
         dataRegImag       <=  32'd0;
@@ -123,7 +123,7 @@ module fftBramCtrl_v2 (
             finish <= 1'b0;
           end
           default: begin
-            addr_counter      <= -13'd4;
+            addr_counter      <= 13'b1111111111100;
             micCount          <=   4'd0;
             dataRegReal       <=  32'd0;
             dataRegImag       <=  32'd0;
